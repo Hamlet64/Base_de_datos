@@ -1,0 +1,240 @@
+/* 1*/
+  select p.ProductName, c.CategoryName
+  from dbo.Products p, dbo.Categories c
+  where p.CategoryID=c.CategoryID
+
+ /* 2*/
+select p.ProductName, max(od.Quantity) maxim
+from Northwind.dbo.Products p, Northwind.dbo.[Order Details] od
+where p.ProductID=od.ProductID
+group by p.ProductName
+order by maxim desc
+
+/* 3*/
+select e.FirstName+', '+e.LastName Nombre_Completo, od.Quantity Cantidad
+from Northwind.dbo.Employees e, Northwind.dbo.Orders o, Northwind.dbo.[Order Details] od
+where o.EmployeeID = e.EmployeeID
+and o.OrderID=od.OrderID
+order by od.Quantity desc
+
+/* 4*/
+select c.CompanyName, od.Quantity
+from Northwind.dbo.Customers c, Northwind.dbo.Orders o, Northwind.dbo.[Order Details] od
+where o.CustomerID= c.CustomerID
+and o.OrderID=od.OrderID
+order by od.Quantity desc
+
+/* 5*/
+select c.CompanyName
+from Northwind.dbo.Customers c, Northwind.dbo.Orders o
+where c.CustomerID not in (select OD.CustomerID from 
+Northwind.dbo.Customers OD)
+
+/* 6*/
+select c.CompanyName
+from Northwind.dbo.Customers c, Northwind.dbo.Orders o
+where c.CustomerID=o.CustomerID
+and o.ShipRegion is null 
+
+/* tarea de 13 en adelante*/
+/*Trabajando con la base de datos de Northwind, elabore consultas para atender lo siguiente:*/
+/*14*/
+SELECT
+    c.Country AS Pais,
+    YEAR(o.OrderDate) AS Año,
+    SUM(od.Quantity * (od.UnitPrice - (od.UnitPrice * od.Discount))) AS ImporteAnualVenta
+FROM
+    Orders o
+    INNER JOIN Customers c ON o.CustomerID = c.CustomerID
+    INNER JOIN [Order Details] od ON o.OrderID = od.OrderID
+GROUP BY
+    c.Country, YEAR(o.OrderDate)
+HAVING
+    SUM(od.Quantity * (od.UnitPrice - (od.UnitPrice * od.Discount))) > 45000
+ORDER BY
+    ImporteAnualVenta DESC;
+/*16*/
+SELECT
+    p.ProductName AS NombreProducto,
+    SUM(od.Quantity) AS CantidadPendienteEntrega,
+    p.UnitsInStock AS StockActual,
+    (SUM(od.Quantity) - p.UnitsInStock) AS CantidadFaltante
+FROM
+    Products p
+    INNER JOIN [Order Details] od ON p.ProductID = od.ProductID
+    INNER JOIN Orders o ON od.OrderID = o.OrderID
+WHERE
+    p.Discontinued = 0
+    AND o.ShippedDate IS NULL
+GROUP BY
+    p.ProductName, p.UnitsInStock
+HAVING
+    SUM(od.Quantity) > p.UnitsInStock;
+
+/*18*/
+SELECT
+    OrderID,
+    OrderDate,
+    ShippedDate,
+    DATEDIFF(day, OrderDate, ShippedDate) AS DiferenciaDias,
+    DATEDIFF(week, OrderDate, ShippedDate) AS DiferenciaSemanas
+FROM
+    Orders
+WHERE
+    DATEDIFF(day, OrderDate, ShippedDate) > (SELECT AVG(DATEDIFF(day, OrderDate, ShippedDate)) FROM Orders)
+    AND DATEDIFF(week, OrderDate, ShippedDate) > (SELECT AVG(DATEDIFF(week, OrderDate, ShippedDate)) FROM Orders)
+/*13*/
+SELECT
+    E.EmployeeID AS CodigoJefe,
+    E.LastName AS ApellidoJefe,
+    YEAR(O.OrderDate) AS Anio,
+    MONTH(O.OrderDate) AS Mes,
+    SUM(OD.Quantity * OD.UnitPrice) AS MontoVentaAcumulado,
+    (SUM(OD.Quantity * OD.UnitPrice) * 0.005) AS Comision
+FROM
+    Employees E
+    INNER JOIN Employees S ON E.EmployeeID = S.ReportsTo
+    INNER JOIN Orders O ON S.EmployeeID = O.EmployeeID
+    INNER JOIN [Order Details] OD ON O.OrderID = OD.OrderID
+GROUP BY
+    E.EmployeeID,
+    E.LastName,
+    YEAR(O.OrderDate),
+    MONTH(O.OrderDate)
+/*15*/
+SELECT
+    ProductID AS IdProducto,
+    ProductName AS NombreProducto,
+    UnitPrice AS Precio
+FROM
+    Products
+WHERE
+    Discontinued = 1
+    AND UnitPrice < (SELECT AVG(UnitPrice) FROM Products)
+
+/*Trabajando con la base de datos de Northwind, crea funciones*/
+
+/*1*/
+CREATE FUNCTION ObtenerPaisClienteMenorPedidosAtendidos(@anio INT)
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @pais NVARCHAR(50)
+    
+    SELECT TOP 1 @pais = c.Country
+    FROM Customers c
+    INNER JOIN Orders o ON c.CustomerID = o.CustomerID
+    WHERE YEAR(o.OrderDate) = @anio
+    GROUP BY c.Country
+    ORDER BY COUNT(*) ASC
+    
+    RETURN @pais
+END
+/*2*/
+CREATE FUNCTION ObtenerCategoriaMayorCantidadProductosVendidos(@anio INT)
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @categoria NVARCHAR(50)
+    
+    SELECT TOP 1 @categoria = cat.CategoryName
+    FROM Categories cat
+    INNER JOIN Products p ON cat.CategoryID = p.CategoryID
+    INNER JOIN [Order Details] od ON p.ProductID = od.ProductID
+    INNER JOIN Orders o ON od.OrderID = o.OrderID
+    WHERE YEAR(o.OrderDate) = @anio
+    GROUP BY cat.CategoryName
+    ORDER BY SUM(od.Quantity) DESC
+    
+    RETURN @categoria
+END
+/*3*/
+CREATE FUNCTION ObtenerCantidadOrdenesAtendidas(@anio INT)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @cantidadOrdenes INT
+    
+    SELECT @cantidadOrdenes = COUNT(*)
+    FROM Orders
+    WHERE YEAR(OrderDate) = @anio
+    
+    RETURN @cantidadOrdenes
+END
+/*4*/
+CREATE FUNCTION ObtenerCompaniaMasOrdenes(@anio INT)
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @compania NVARCHAR(50)
+    
+    SELECT TOP 1 @compania = c.CompanyName
+    FROM Customers c
+    INNER JOIN Orders o ON c.CustomerID = o.CustomerID
+    WHERE YEAR(o.OrderDate) = @anio
+    GROUP BY c.CompanyName
+    ORDER BY COUNT(*) DESC
+    
+    RETURN @compania
+END
+/*5*/
+CREATE FUNCTION ObtenerShipperMasPedidos(@anio INT)
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @shipper NVARCHAR(50)
+    
+    SELECT TOP 1 @shipper = s.CompanyName
+    FROM Shippers s
+    INNER JOIN Orders o ON s.ShipperID = o.ShipperID
+    WHERE YEAR(o.OrderDate) = @anio
+    GROUP BY s.CompanyName
+    ORDER BY COUNT(*) DESC
+    
+    RETURN @shipper
+END
+/*6*/
+CREATE FUNCTION ObtenerCompaniaProveedoraMasPedidos(@anio INT)
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @compania NVARCHAR(50)
+    
+    SELECT TOP 1 @compania = s.CompanyName
+    FROM Suppliers s
+    INNER JOIN Products p ON s.SupplierID = p.SupplierID
+    INNER JOIN [Order Details] od ON p.ProductID = od.ProductID
+    INNER JOIN Orders o ON od.OrderID = o.OrderID
+    WHERE YEAR(o.OrderDate) = @anio
+    GROUP BY s.CompanyName
+    ORDER BY COUNT(*) DESC
+    
+    RETURN @compania
+END
+/*7*/
+CREATE FUNCTION ObtenerClienteMasPedidosPorPais(@anio INT, @pais NVARCHAR(50))
+RETURNS NVARCHAR(50)
+AS
+BEGIN
+    DECLARE @cliente NVARCHAR(50)
+    
+    SELECT TOP 1 @cliente = c.CompanyName
+    FROM Customers c
+    INNER JOIN Orders o ON c.CustomerID = o.CustomerID
+    WHERE YEAR(o.OrderDate) = @anio
+    AND c.Country = @pais
+    GROUP BY c.CompanyName
+    ORDER BY COUNT(*) DESC
+    
+    RETURN @cliente
+END
+/*8*/
+CREATE PROCEDURE ListarProductosPorCategoria @categoria NVARCHAR(50)
+AS
+BEGIN
+    SELECT p.ProductID, p.ProductName, c.CategoryName, p.UnitPrice
+    FROM Products p
+    INNER JOIN Categories c ON p.CategoryID = c.CategoryID
+    WHERE c.CategoryName = @categoria
+    AND p.Discontinued = 0
+END
